@@ -4,6 +4,9 @@ import re
 import sys
 import random
 import numpy as np
+import argparse
+
+OPTIM_YELLOW_WEIGHT = 1.4
 
 def get_wordle_words(dict_path="/usr/share/dict/words"):
     with open(dict_path, "r") as f:
@@ -67,7 +70,7 @@ def filter_words(grey_letters, yellow_letters, green_re, words):
 
     return words
 
-def get_best_word(grey_letters, yellow_letters, re, words, yellow_weight=1.4, green_weight=1):
+def get_best_word(grey_letters, yellow_letters, re, words, yellow_weight, green_weight=1):
 
     words = filter_words(grey_letters, yellow_letters, re, words)
 
@@ -125,12 +128,12 @@ def gen_re_from_knowledge(yellow_letters, green_letters):
             re += "."
     return re
             
-def play(words, solution, yellow_weight, strategy=1):
+def play(words, solution, yellow_weight=OPTIM_YELLOW_WEIGHT, strategy=1):
 
     grey_letters = []
     yellow_letters = [[] for _ in range(5)]
     green_letters = [[] for _ in range(5)]
-    last_guess = ""
+    guesses = []
 
     for i in range(20):
         re = gen_re_from_knowledge(yellow_letters, green_letters)
@@ -140,16 +143,14 @@ def play(words, solution, yellow_weight, strategy=1):
             all_yellow_letters += letters
 
         guess = get_best_word(grey_letters, all_yellow_letters, re, words, yellow_weight)
+        guesses.append(guess)
         
         if guess == solution:
-            return i + 1
+            return guesses
 
         hints = gen_hints(guess, solution)
 
         (grey_letters, yellow_letters, green_letters) = update_knowlege(hints, [grey_letters, yellow_letters, green_letters])
-        last_guess = guess
-
-    print(f"Could not solve for {solution}. Best guess was {guess}.")
 
 def optimize():
     words = get_wordle_words()
@@ -163,18 +164,53 @@ def optimize():
 
         for solution in words:
             iterations += 1
-            score = play(words, solution, yellow_weight)
+            guesses = play(words, solution, yellow_weight)
+            score = len(guesses)
             total_score += score
             if score > 6:
                 losses += 1
 
         print(f"{yellow_weight}, {total_score/iterations}, {losses/iterations}")
 
-def solve():
+def solve(grey_letters, yellow_letters, regex):
     words = get_wordle_words()
-    print(get_best_word(sys.argv[1], sys.argv[2], sys.argv[3], words))
+    print(get_best_word(grey_letters, yellow_letters, regex, words, OPTIM_YELLOW_WEIGHT))
+
+def solve_cmd(args):
+    solve(args.grey, args.yellow, args.regex)
+
+def play_cmd(args):
+    words = get_wordle_words()
+
+    try:
+        print("\n".join(play(words, args.solution)))
+    except:
+        print(f"Could not solve for '{args.solution}'.", file=sys.stderr)
+
+def optimize_cmd(args):
+    optimize()
+
+def solution_checker(solution):
+    if len(solution) != 5:
+        raise argparse.ArgumentTypeError("Solution must have 5 letters!")
+    return solution
 
 if __name__ == "__main__":
-    optimize()
-    solve()
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title="command", dest="command", required=True)
 
+    parser_solve = subparsers.add_parser("solve", description="solve a puzzle")
+    parser_solve.add_argument("--grey", help="grey letters")
+    parser_solve.add_argument("--yellow", help="yellow letters")
+    parser_solve.add_argument("--regex", help="regular expression")
+    parser_solve.set_defaults(grey="", yellow="", regex=".....", func=solve_cmd)
+
+    parser_play = subparsers.add_parser("play", description="play for a given solution")
+    parser_play.add_argument("solution", type=solution_checker)
+    parser_play.set_defaults(func=play_cmd)
+
+    parser_optim = subparsers.add_parser("optimize", description="optimize weights")
+    parser_optim.set_defaults(func=optimize_cmd)
+
+    args = parser.parse_args()
+    args.func(args)
