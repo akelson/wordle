@@ -5,13 +5,22 @@ import sys
 import random
 import numpy as np
 
-def get_wordle_words():
-    with open("/usr/share/dict/words", "r") as f:
+def get_wordle_words(dict_path="/usr/share/dict/words"):
+    with open(dict_path, "r") as f:
         words = [line.strip() for line in f]
+
+        # 5 letter words
         words = [word for word in words if len(word) == 5]
+
+        # No proper nouns
         words = [word for word in words if word[0].islower()]
+
+        # No contractions
         words = [word for word in words if not "'" in word]
+
+        # No words with accents
         words = [word for word in words if word.isascii()]
+
         return words
 
 def get_letter_counts(words):
@@ -58,7 +67,7 @@ def filter_words(grey_letters, yellow_letters, green_re, words):
 
     return words
 
-def get_best_word(grey_letters, yellow_letters, re, words, yellow_weight=1, green_weight=1):
+def get_best_word(grey_letters, yellow_letters, re, words, yellow_weight=1.4, green_weight=1):
 
     words = filter_words(grey_letters, yellow_letters, re, words)
 
@@ -124,24 +133,13 @@ def play(words, solution, yellow_weight, strategy=1):
     last_guess = ""
 
     for i in range(20):
-        if 1 == strategy or i > 1:
-            re = gen_re_from_knowledge(yellow_letters, green_letters)
-        else:
-            re = "....."
+        re = gen_re_from_knowledge(yellow_letters, green_letters)
 
         all_yellow_letters = []
         for letters in yellow_letters:
             all_yellow_letters += letters
 
-        if 1 == strategy or i > 1:
-            guess = get_best_word(grey_letters, all_yellow_letters, re, words, yellow_weight)
-        elif 0 == 0:
-            guess = get_best_word("", "", ".....", words, green_weight=0)
-        elif 0 == 1:
-            all_green_letters = []
-            for letters in green_letters:
-                all_green_letters += letters
-            guess = get_best_word(last_guess, all_yellow_letters + all_green_letters, ".....", words, green_weight=0)
+        guess = get_best_word(grey_letters, all_yellow_letters, re, words, yellow_weight)
         
         if guess == solution:
             return i + 1
@@ -153,25 +151,30 @@ def play(words, solution, yellow_weight, strategy=1):
 
     print(f"Could not solve for {solution}. Best guess was {guess}.")
 
-if __name__ == "__main__":
-
+def optimize():
     words = get_wordle_words()
-    print(len(words))
 
-    for strat in [1, 2]:
-        for i in np.arange(-3, 3, .25):
-            yellow_weight = 2 ** i
+    for i in np.arange(-2, 2, .25):
+        yellow_weight = 2 ** i
 
-            iterations = 0
-            total_score = 0
+        iterations = 0
+        total_score = 0
+        losses = 0
 
-            for solution in words:
-                iterations += 1
-                total_score += play(words, solution, yellow_weight, strat)
+        for solution in words:
+            iterations += 1
+            score = play(words, solution, yellow_weight)
+            total_score += score
+            if score > 6:
+                losses += 1
 
-            print(f"{strat}, {yellow_weight}, {total_score/iterations}")
+        print(f"{yellow_weight}, {total_score/iterations}, {losses/iterations}")
 
-    #print(get_best_word(sys.argv[1], sys.argv[2], sys.argv[3], words))
+def solve():
+    words = get_wordle_words()
+    print(get_best_word(sys.argv[1], sys.argv[2], sys.argv[3], words))
 
-
+if __name__ == "__main__":
+    optimize()
+    solve()
 
